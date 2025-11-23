@@ -1,204 +1,234 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>收入记录</title>
-  <style>
-    body {
-      font-family: 'Microsoft YaHei', sans-serif;
-      background: #f4f6f8;
-      margin: 0;
-      padding: 20px;
-      color: #333;
-    }
-    h1 {
-      text-align: center;
-      color: #2c3e50;
-    }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      padding: 20px;
-    }
-    input, select, button, textarea {
-      padding: 8px;
-      margin: 5px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    button {
-      cursor: pointer;
-      background: #3498db;
-      color: white;
-      border: none;
-      transition: 0.3s;
-    }
-    button:hover {
-      background: #2980b9;
-    }
-    .record-list {
-      margin-top: 20px;
-    }
-    .record-item {
-      display: flex;
-      justify-content: space-between;
-      background: #f9f9f9;
-      border-radius: 8px;
-      padding: 10px;
-      margin-bottom: 8px;
-    }
-    .record-item.negative {
-      color: #e74c3c;
-    }
-    .record-item.positive {
-      color: #2ecc71;
-    }
-    .summary {
-      margin-top: 20px;
-      background: #ecf0f1;
-      padding: 10px;
-      border-radius: 8px;
-    }
-    .top-buttons {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>多文件手机号国家分析与对比工具（多区号查询）</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body {
+    font-family: "Microsoft YaHei", sans-serif;
+    background: #f5f6fa;
+    padding: 30px;
+  }
+  h2 { color: #333; }
+  input[type="file"], input[type="text"], button {
+    margin: 10px 10px 20px 0;
+    padding: 8px;
+    font-size: 16px;
+  }
+  button {
+    background: #409eff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #66b1ff; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 15px;
+    background: #fff;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+  }
+  th { background: #eee; }
+  .chart-container { width: 90%; margin: 30px auto; }
+  .file-section, .diff-section, .lookup-section {
+    background: #fff;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+  .diff-section { border-left: 5px solid #409eff; }
+  .lookup-section { border-left: 5px solid #67c23a; }
+  #lookupResult span {
+    display: inline-block;
+    margin: 4px 6px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #eef5ff;
+  }
+  .found { color: #67c23a; border: 1px solid #67c23a; background: #f0fff0; }
+  .notfound { color: #f56c6c; border: 1px solid #f56c6c; background: #fff0f0; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>收入记录</h1>
 
-    <div class="top-buttons">
-      <button onclick="exportData()">📤 导出数据</button>
-      <button onclick="downloadData()">💾 下载数据(JSON)</button>
-      <button onclick="importDataDialog()">📥 导入数据</button>
-    </div>
+<h2>📊 多文件手机号国家分析 & 对比工具（多区号查询）</h2>
 
-    <div>
-      <input type="date" id="dateInput" />
-      <input type="number" id="amountInput" placeholder="金额" />
-      <input type="text" id="categoryInput" placeholder="分类" />
-      <input type="text" id="noteInput" placeholder="备注" />
-      <button onclick="addRecord()">添加记录</button>
-    </div>
+<div class="lookup-section">
+  <h3>🔍 区号查询（支持多个区号，空格或逗号分隔）</h3>
+  <input type="text" id="lookupInput" placeholder="输入区号，如 +86 91 234" oninput="lookupCountry()">
+  <div id="lookupResult">请输入区号进行查询</div>
+</div>
 
-    <div id="recordsContainer" class="record-list"></div>
-    <div id="summaryContainer" class="summary"></div>
-  </div>
+<input type="file" id="fileInput" multiple accept=".txt">
+<button onclick="analyzeFiles()">开始分析</button>
 
-  <script>
-    const STORAGE_KEY = 'incomeRecords';
+<div id="result"></div>
+<div class="chart-container">
+  <canvas id="summaryChart"></canvas>
+</div>
+<div id="compare"></div>
 
-    function loadRecords() {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+<script>
+/* === 国际区号表 === */
+const countryCodes = {
+  "1":"美国/加拿大","7":"俄罗斯/哈萨克斯坦","20":"埃及","27":"南非","30":"希腊","31":"荷兰","32":"比利时","33":"法国","34":"西班牙","36":"匈牙利","39":"意大利",
+  "40":"罗马尼亚","41":"瑞士","43":"奥地利","44":"英国","45":"丹麦","46":"瑞典","47":"挪威","48":"波兰","49":"德国","51":"秘鲁","52":"墨西哥","53":"古巴",
+  "54":"阿根廷","55":"巴西","56":"智利","57":"哥伦比亚","58":"委内瑞拉","60":"马来西亚","61":"澳大利亚","62":"印度尼西亚","63":"菲律宾","64":"新西兰",
+  "65":"新加坡","66":"泰国","81":"日本","82":"韩国","84":"越南","86":"中国","90":"土耳其","91":"印度","92":"巴基斯坦","93":"阿富汗","94":"斯里兰卡",
+  "95":"缅甸","98":"伊朗","212":"摩洛哥","213":"阿尔及利亚","216":"突尼斯","218":"利比亚","220":"冈比亚","221":"塞内加尔","222":"毛里塔尼亚",
+  "223":"马里","224":"几内亚","225":"科特迪瓦","226":"布基纳法索","227":"尼日尔","228":"多哥","229":"贝宁","230":"毛里求斯","231":"利比里亚",
+  "232":"塞拉利昂","233":"加纳","234":"尼日利亚","235":"乍得","236":"中非共和国","237":"喀麦隆","238":"佛得角","239":"圣多美和普林西比","240":"赤道几内亚",
+  "241":"加蓬","242":"刚果（布）","243":"刚果（金）","244":"安哥拉","245":"几内亚比绍","248":"塞舌尔","249":"苏丹","250":"卢旺达","251":"埃塞俄比亚",
+  "252":"索马里","253":"吉布提","254":"肯尼亚","255":"坦桑尼亚","256":"乌干达","257":"布隆迪","258":"莫桑比克","260":"赞比亚","261":"马达加斯加",
+  "263":"津巴布韦","264":"纳米比亚","265":"马拉维","266":"莱索托","267":"博茨瓦纳","268":"斯威士兰","269":"科摩罗","290":"圣赫勒拿","297":"阿鲁巴",
+  "298":"法罗群岛","299":"格陵兰","350":"直布罗陀","351":"葡萄牙","352":"卢森堡","353":"爱尔兰","354":"冰岛","355":"阿尔巴尼亚","356":"马耳他",
+  "357":"塞浦路斯","358":"芬兰","359":"保加利亚","370":"立陶宛","371":"拉脱维亚","372":"爱沙尼亚","373":"摩尔多瓦","374":"亚美尼亚","375":"白俄罗斯",
+  "376":"安道尔","377":"摩纳哥","378":"圣马力诺","380":"乌克兰","381":"塞尔维亚","382":"黑山","385":"克罗地亚","386":"斯洛文尼亚","387":"波黑",
+  "389":"北马其顿","420":"捷克","421":"斯洛伐克","423":"列支敦士登","500":"福克兰群岛","501":"伯利兹","502":"危地马拉","503":"萨尔瓦多","504":"洪都拉斯",
+  "505":"尼加拉瓜","506":"哥斯达黎加","507":"巴拿马","509":"海地","591":"玻利维亚","592":"圭亚那","593":"厄瓜多尔","594":"法属圭亚那","595":"巴拉圭",
+  "598":"乌拉圭","673":"文莱","850":"朝鲜","852":"香港","853":"澳门","855":"柬埔寨","856":"老挝","880":"孟加拉","886":"台湾","960":"马尔代夫",
+  "961":"黎巴嫩","962":"约旦","963":"叙利亚","964":"伊拉克","965":"科威特","966":"沙特","967":"也门","968":"阿曼","971":"阿联酋","972":"以色列",
+  "973":"巴林","974":"卡塔尔","975":"不丹","976":"蒙古","977":"尼泊尔","992":"塔吉克斯坦","993":"土库曼斯坦","994":"阿塞拜疆","995":"格鲁吉亚",
+  "996":"吉尔吉斯斯坦","998":"乌兹别克斯坦"
+};
+
+/* === 多区号实时查询 === */
+function lookupCountry() {
+  const input = document.getElementById("lookupInput").value.trim();
+  const result = document.getElementById("lookupResult");
+  if (!input) {
+    result.innerHTML = "请输入区号进行查询";
+    return;
+  }
+
+  const parts = input.split(/[\s,，]+/).map(p => p.replace(/^\+/, '').trim()).filter(Boolean);
+  if (!parts.length) {
+    result.innerHTML = "请输入区号进行查询";
+    return;
+  }
+
+  const output = parts.map(code => {
+    const country = countryCodes[code];
+    if (country) {
+      return `<span class="found">+${code}：${country}</span>`;
+    } else {
+      return `<span class="notfound">+${code}：未找到</span>`;
     }
+  });
 
-    function saveRecords(records) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    }
+  result.innerHTML = output.join(" ");
+}
 
-    function addRecord() {
-      const date = document.getElementById('dateInput').value;
-      const amount = parseFloat(document.getElementById('amountInput').value);
-      const category = document.getElementById('categoryInput').value.trim();
-      const note = document.getElementById('noteInput').value.trim();
-      if (!date || isNaN(amount)) return alert('请输入日期和金额');
-      const records = loadRecords();
-      records.push({ date, amount, category, note });
-      saveRecords(records);
-      render();
-    }
+/* === 文件分析逻辑 === */
+function analyzeFiles() {
+  const files = document.getElementById('fileInput').files;
+  if (!files.length) return alert("请先选择一个或多个TXT文件！");
+  document.getElementById('result').innerHTML = "分析中...";
 
-    function groupByMonth(records) {
-      return records.reduce((acc, rec) => {
-        const month = rec.date.slice(0,7);
-        if (!acc[month]) acc[month] = [];
-        acc[month].push(rec);
-        return acc;
-      }, {});
-    }
+  const readerPromises = [];
+  for (let f of files) {
+    readerPromises.push(new Promise(resolve => {
+      const r = new FileReader();
+      r.onload = e => resolve({name: f.name, text: e.target.result});
+      r.readAsText(f, "utf-8");
+    }));
+  }
 
-    function render() {
-      const records = loadRecords();
-      const grouped = groupByMonth(records);
-      const container = document.getElementById('recordsContainer');
-      const summary = document.getElementById('summaryContainer');
-      container.innerHTML = '';
-      summary.innerHTML = '';
+  Promise.all(readerPromises).then(fileData => {
+    const fileResults = [];
+    const totalCounts = {};
 
-      Object.keys(grouped).sort().reverse().forEach(month => {
-        const monthRecords = grouped[month];
-        const total = monthRecords.reduce((sum, r) => sum + r.amount, 0);
-
-        const monthDiv = document.createElement('div');
-        monthDiv.innerHTML = `<h3>${month}（总计：<span style="color:${total>=0?'#2ecc71':'#e74c3c'}">${total.toFixed(2)}</span>）</h3>`;
-
-        monthRecords.forEach((r, idx) => {
-          const item = document.createElement('div');
-          item.className = 'record-item ' + (r.amount>=0 ? 'positive' : 'negative');
-          item.innerHTML = `
-            <div>${r.date} | ${r.category || '未分类'} | ${r.note || ''}</div>
-            <div>${r.amount.toFixed(2)}</div>
-          `;
-          monthDiv.appendChild(item);
-        });
-
-        container.appendChild(monthDiv);
+    fileData.forEach(f => {
+      const phones = f.text.match(/\+?\d{6,16}/g) || [];
+      const stats = {};
+      phones.forEach(num => {
+        const country = findCountry(num);
+        if (country) {
+          stats[country] = (stats[country] || 0) + 1;
+          totalCounts[country] = (totalCounts[country] || 0) + 1;
+        }
       });
-    }
+      fileResults.push({file: f.name, stats});
+    });
 
-    function exportData() {
-      const data = JSON.stringify(loadRecords(), null, 2);
-      prompt('以下是您的数据，可复制保存：', data);
-    }
+    renderTables(fileResults);
+    renderSummaryChart(totalCounts);
+    renderCompare(fileResults);
+  });
+}
 
-    function downloadData() {
-      const records = loadRecords();
-      const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const today = new Date().toISOString().slice(0,10);
-      a.href = url;
-      a.download = `income_records_${today}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
+/* === 优化：返回带区号的国家名 === */
+function findCountry(num) {
+  num = num.replace(/\D/g, '');
+  for (let len = 4; len >= 1; len--) {
+    const prefix = num.slice(0, len);
+    if (countryCodes[prefix]) return `+${prefix} ${countryCodes[prefix]}`;
+  }
+  return null;
+}
 
-    function importDataDialog() {
-      const json = prompt('粘贴导入的JSON数据：');
-      if (!json) return;
-      let imported;
-      try {
-        imported = JSON.parse(json);
-      } catch(e) {
-        alert('JSON格式错误');
-        return;
-      }
+function renderTables(results) {
+  let html = "";
+  results.forEach(r => {
+    html += `<div class="file-section"><h3>📄 ${r.file}</h3><table><tr><th>国家</th><th>数量</th></tr>`;
+    const entries = Object.entries(r.stats).sort((a,b)=>b[1]-a[1]);
+    entries.forEach(([country, count]) => {
+      html += `<tr><td>${country}</td><td>${count}</td></tr>`;
+    });
+    html += "</table></div>";
+  });
+  document.getElementById('result').innerHTML = html;
+}
 
-      const mode = confirm('是否覆盖现有数据？\n确定=覆盖，取消=合并');
-      let records = loadRecords();
-      if (mode) {
-        records = imported;
-      } else {
-        records = [...records, ...imported];
-      }
-      saveRecords(records);
-      alert('导入成功！');
-      render();
-    }
+function renderSummaryChart(totalCounts) {
+  const ctx = document.getElementById('summaryChart').getContext('2d');
+  const labels = Object.keys(totalCounts);
+  const values = Object.values(totalCounts);
+  if (window.chartInstance) window.chartInstance.destroy();
+  window.chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: '总计手机号数量', data: values, backgroundColor: '#409eff' }]
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+  });
+}
 
-    render();
-  </script>
+function renderCompare(results) {
+  const fileCountries = {};
+  results.forEach(r => fileCountries[r.file] = new Set(Object.keys(r.stats)));
+
+  const allCountries = new Set();
+  Object.values(fileCountries).forEach(set => set.forEach(c => allCountries.add(c)));
+
+  const intersection = [...allCountries].filter(c =>
+    Object.values(fileCountries).every(set => set.has(c))
+  );
+
+  let html = `<div class="diff-section"><h3>🌐 国家对比结果</h3>`;
+  html += `<h4>✅ 所有文件共有国家 (${intersection.length})</h4>`;
+  html += intersection.length ? intersection.join("，") : "无";
+
+  results.forEach(r => {
+    const uniqueCountries = [...fileCountries[r.file]].filter(c =>
+      !Object.values(fileCountries).some(set => set !== fileCountries[r.file] && set.has(c))
+    );
+    html += `<h4>📄 ${r.file}</h4>`;
+    html += `<b>独有国家:</b> ${uniqueCountries.length ? uniqueCountries.join("，") : "无"}<br>`;
+  });
+
+  html += `</div>`;
+  document.getElementById('compare').innerHTML = html;
+}
+</script>
 </body>
 </html>
